@@ -132,7 +132,7 @@ const App: React.FC = () => {
             <div className="bg-black/40 px-4 py-2 rounded-2xl border border-white/5 flex items-center gap-3">
                <div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]"></div>
                <span className="text-[10px] font-mono text-amber-500 uppercase font-bold tracking-tighter">
-                UART > {lastCmd}
+                UART &gt; {lastCmd}
                </span>
             </div>
             <button
