@@ -36,8 +36,15 @@ const GestureCamera: React.FC<GestureCameraProps> = ({ onGesture, isActive }) =>
       return;
     }
 
+    // Safety check for API Key to prevent crash
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+      setError('Gemini API Key missing. Check environment variables.');
+      return;
+    }
+
     let session: any = null;
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey });
 
     const setupSession = async () => {
       try {
@@ -50,7 +57,7 @@ const GestureCamera: React.FC<GestureCameraProps> = ({ onGesture, isActive }) =>
           model: 'gemini-2.5-flash-native-audio-preview-12-2025',
           config: {
             responseModalities: [Modality.AUDIO],
-            systemInstruction: `Return ONLY one of these labels: FORWARD, BACKWARD, LEFT, RIGHT, STOP. If no hand is seen or command unclear, return NONE. No speech.`,
+            systemInstruction: `Return ONLY one of these labels: FORWARD, BACKWARD, LEFT, RIGHT, STOP. If no hand is seen or command unclear, return NONE. No speech. Respond ONLY with the command string.`,
             outputAudioTranscription: {},
           },
           callbacks: {
@@ -116,10 +123,11 @@ const GestureCamera: React.FC<GestureCameraProps> = ({ onGesture, isActive }) =>
     <div className="relative h-full w-full rounded-[32px] overflow-hidden bg-slate-900 border border-white/10 shadow-inner">
       {!isActive ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 z-10 p-6 text-center">
-          <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-4">
+          <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-4 border border-white/5">
             <i className="fa-solid fa-video-slash text-xl"></i>
           </div>
           <p className="text-[10px] font-black uppercase tracking-[0.2em]">Vision Disconnected</p>
+          {error && <p className="mt-4 text-red-500 text-[10px] font-bold max-w-[200px]">{error}</p>}
         </div>
       ) : (
         <>
@@ -133,21 +141,21 @@ const GestureCamera: React.FC<GestureCameraProps> = ({ onGesture, isActive }) =>
           />
           <canvas ref={canvasRef} className="hidden" />
           
-          <div className="absolute top-4 left-4 flex items-center gap-2 bg-indigo-600 px-3 py-1.5 rounded-full border border-white/20 shadow-lg">
+          <div className="absolute top-4 left-4 flex items-center gap-2 bg-indigo-600 px-3 py-1.5 rounded-full border border-white/20 shadow-lg z-20">
             <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></div>
             <span className="text-[9px] font-black uppercase tracking-widest">AI Live</span>
           </div>
 
-          <div className="absolute inset-x-0 bottom-6 flex justify-center">
+          <div className="absolute inset-x-0 bottom-6 flex justify-center z-20">
              <div className="px-8 py-3 bg-white text-slate-950 rounded-2xl font-black text-lg tracking-tighter shadow-2xl animate-pulse-slow">
                {currentGesture}
              </div>
           </div>
         </>
       )}
-      {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-red-600/90 backdrop-blur z-50 text-white p-6 text-center">
-          <div>
+      {error && !isActive && (
+        <div className="absolute inset-0 flex items-center justify-center bg-red-600/10 backdrop-blur-sm z-50 text-white p-6 text-center">
+          <div className="bg-red-600 p-6 rounded-3xl shadow-2xl">
             <i className="fa-solid fa-circle-exclamation text-3xl mb-3"></i>
             <p className="font-bold text-sm tracking-tight">{error}</p>
           </div>
