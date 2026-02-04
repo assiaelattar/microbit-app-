@@ -11,37 +11,43 @@ interface ControlPadProps {
 const ControlPad: React.FC<ControlPadProps> = ({ onCommand, disabled, powerOn }) => {
   const isAvailable = !disabled && powerOn;
 
-  const btnClass = (area: string, color: string = 'indigo') => `
-    w-16 h-16 sm:w-20 sm:h-20 rounded-[24px] flex items-center justify-center text-2xl transition-all duration-150
+  const btnClass = (color: string = 'indigo') => `
+    w-16 h-16 sm:w-20 sm:h-20 rounded-[24px] flex items-center justify-center text-2xl transition-all duration-150 touch-none
     ${!isAvailable 
       ? 'bg-slate-800 text-slate-700 opacity-40 cursor-not-allowed' 
       : `bg-${color}-600/10 border-2 border-${color}-500/20 text-${color}-400 active:scale-90 active:bg-${color}-500 active:text-white shadow-lg shadow-${color}-500/5`
     }
   `;
 
+  const handlePointerDown = (cmd: Command) => {
+    if (isAvailable) onCommand(cmd);
+  };
+
+  const handlePointerUp = () => {
+    if (isAvailable) onCommand('STOP');
+  };
+
   return (
     <div className="flex justify-center items-center">
       <div className="control-grid">
         <div style={{ gridArea: 'up' }}>
           <button 
-            onMouseDown={() => onCommand('FORWARD')}
-            onMouseUp={() => onCommand('STOP')}
-            onTouchStart={(e) => { e.preventDefault(); onCommand('FORWARD'); }}
-            onTouchEnd={(e) => { e.preventDefault(); onCommand('STOP'); }}
+            onPointerDown={() => handlePointerDown('FORWARD')}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
             disabled={!isAvailable}
-            className={btnClass('up')}
+            className={btnClass()}
           >
             <i className="fa-solid fa-caret-up"></i>
           </button>
         </div>
         <div style={{ gridArea: 'left' }}>
           <button 
-            onMouseDown={() => onCommand('LEFT')}
-            onMouseUp={() => onCommand('STOP')}
-            onTouchStart={(e) => { e.preventDefault(); onCommand('LEFT'); }}
-            onTouchEnd={(e) => { e.preventDefault(); onCommand('STOP'); }}
+            onPointerDown={() => handlePointerDown('LEFT')}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
             disabled={!isAvailable}
-            className={btnClass('left')}
+            className={btnClass()}
           >
             <i className="fa-solid fa-caret-left"></i>
           </button>
@@ -50,31 +56,29 @@ const ControlPad: React.FC<ControlPadProps> = ({ onCommand, disabled, powerOn })
           <button 
             onClick={() => onCommand('STOP')}
             disabled={!isAvailable}
-            className={btnClass('stop', 'red')}
+            className={btnClass('red')}
           >
             <i className="fa-solid fa-stop text-sm"></i>
           </button>
         </div>
         <div style={{ gridArea: 'right' }}>
           <button 
-            onMouseDown={() => onCommand('RIGHT')}
-            onMouseUp={() => onCommand('STOP')}
-            onTouchStart={(e) => { e.preventDefault(); onCommand('RIGHT'); }}
-            onTouchEnd={(e) => { e.preventDefault(); onCommand('STOP'); }}
+            onPointerDown={() => handlePointerDown('RIGHT')}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
             disabled={!isAvailable}
-            className={btnClass('right')}
+            className={btnClass()}
           >
             <i className="fa-solid fa-caret-right"></i>
           </button>
         </div>
         <div style={{ gridArea: 'down' }}>
           <button 
-            onMouseDown={() => onCommand('BACKWARD')}
-            onMouseUp={() => onCommand('STOP')}
-            onTouchStart={(e) => { e.preventDefault(); onCommand('BACKWARD'); }}
-            onTouchEnd={(e) => { e.preventDefault(); onCommand('STOP'); }}
+            onPointerDown={() => handlePointerDown('BACKWARD')}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
             disabled={!isAvailable}
-            className={btnClass('down')}
+            className={btnClass()}
           >
             <i className="fa-solid fa-caret-down"></i>
           </button>

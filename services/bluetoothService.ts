@@ -1,80 +1,89 @@
 
 // Nordic UART Service UUIDs (common for micro:bit)
 const UART_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-const UART_TX_CHARACTERISTIC_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+const UART_RX_CHARACTERISTIC_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
 
-type BluetoothDevice = any;
-type BluetoothRemoteGATTCharacteristic = any;
+export type BluetoothLog = {
+  time: string;
+  msg: string;
+  type: 'info' | 'error' | 'tx';
+};
 
 export class BluetoothService {
-  private device: BluetoothDevice | null = null;
-  private characteristic: BluetoothRemoteGATTCharacteristic | null = null;
+  private device: any = null;
+  private characteristic: any = null;
+  private onLogListener: ((log: BluetoothLog) => void) | null = null;
 
-  /**
-   * Connects to a micro:bit via Web Bluetooth.
-   * Note: This MUST be called directly from a user gesture (like a click)
-   * to satisfy browser security policies.
-   */
+  setLogListener(listener: (log: BluetoothLog) => void) {
+    this.onLogListener = listener;
+  }
+
+  private log(msg: string, type: 'info' | 'error' | 'tx' = 'info') {
+    const log: BluetoothLog = {
+      time: new Date().toLocaleTimeString().split(' ')[0],
+      msg,
+      type
+    };
+    console.log(`[BT ${type.toUpperCase()}] ${msg}`);
+    this.onLogListener?.(log);
+  }
+
   async connect(): Promise<string> {
     const bluetooth = (navigator as any).bluetooth;
     
     if (!bluetooth) {
-      throw new Error('Web Bluetooth is not supported in this browser. Please use Chrome or Edge.');
+      throw new Error('Web Bluetooth is not supported in this browser.');
     }
 
     try {
-      // Step 1: Request the device.
-      // The browser checks the 'Permissions Policy' here.
+      this.log('Requesting NovaQuest device...');
       this.device = await bluetooth.requestDevice({
         filters: [{ namePrefix: 'BBC micro:bit' }],
         optionalServices: [UART_SERVICE_UUID]
       });
 
-      // Step 2: Connect to the GATT server
+      this.log(`Connecting to GATT server on ${this.device.name}...`);
       const server = await this.device.gatt?.connect();
-      if (!server) throw new Error('Could not connect to NovaQuest GATT server.');
+      if (!server) throw new Error('Could not connect to GATT server.');
 
-      // Step 3: Get the UART service
+      this.log('Fetching UART Service...');
       const service = await server.getPrimaryService(UART_SERVICE_UUID);
       
-      // Step 4: Get the TX characteristic
-      this.characteristic = await service.getCharacteristic(UART_TX_CHARACTERISTIC_UUID);
+      this.log('Fetching TX/RX characteristic...');
+      // 0002 is the RX characteristic on the peripheral side (what we write to)
+      this.characteristic = await service.getCharacteristic(UART_RX_CHARACTERISTIC_UUID);
 
-      // Setup disconnection listener
       this.device.addEventListener('gattserverdisconnected', () => {
-        console.log('NovaQuest disconnected');
+        this.log('Device disconnected!', 'error');
         this.device = null;
         this.characteristic = null;
       });
 
+      this.log('System ready for transmission.');
       return this.device.name || 'NovaQuest';
     } catch (error: any) {
-      console.error('Bluetooth Connection Error:', error);
-      
-      // Handle the specific 'Permissions Policy' error
-      if (error.name === 'SecurityError' || error.message.toLowerCase().includes('permissions policy')) {
-        throw new Error('Bluetooth access is disallowed by your browser\'s permissions policy. If you are using an editor preview, try opening the app in a new window/tab.');
-      }
-      
-      if (error.name === 'NotFoundError') {
-        throw new Error('No NovaQuest device was selected.');
-      }
-      
+      this.log(error.message, 'error');
       throw error;
     }
   }
 
   async sendCommand(command: string): Promise<void> {
-    if (!this.characteristic) return;
+    if (!this.characteristic) {
+      this.log('Cannot send: Not connected', 'error');
+      return;
+    }
+    
     try {
-      const encoder = new TextEncoder();
       const mapped = this.mapCommandToString(command);
       if (mapped) {
-        // Send command + newline as expected by micro:bit MakeCode UART
-        await this.characteristic.writeValue(encoder.encode(mapped + '\n'));
+        const encoder = new TextEncoder();
+        const data = encoder.encode(mapped + '\n');
+        // writeValue is standard for newer browsers
+        await this.characteristic.writeValue(data);
+        this.log(`SENT: "${mapped}"`, 'tx');
       }
-    } catch (error) {
-      console.error('Failed to send command:', error);
+    } catch (error: any) {
+      this.log(`TX Fail: ${error.message}`, 'error');
     }
   }
 
@@ -85,8 +94,8 @@ export class BluetoothService {
       case 'LEFT': return 'left';
       case 'RIGHT': return 'right';
       case 'STOP': return 'stop';
-      case 'ON': return 'stop'; 
-      case 'OFF': return 'stop';
+      case 'ON': return 'on'; 
+      case 'OFF': return 'off';
       default: return null;
     }
   }
@@ -94,6 +103,7 @@ export class BluetoothService {
   disconnect() {
     if (this.device?.gatt?.connected) {
       this.device.gatt.disconnect();
+      this.log('Manual disconnection initiated.');
     }
   }
 
