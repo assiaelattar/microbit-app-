@@ -8,7 +8,7 @@ interface GestureCameraProps {
   isActive: boolean;
 }
 
-const ANALYZE_INTERVAL = 1500; // 1.5 seconds between AI checks
+const ANALYZE_INTERVAL = 1000; // 1 second between AI checks for better responsiveness
 
 const GestureCamera: React.FC<GestureCameraProps> = ({ onGesture, isActive }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -40,12 +40,19 @@ const GestureCamera: React.FC<GestureCameraProps> = ({ onGesture, isActive }) =>
     const setupCamera = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: 'user' } 
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } } 
         });
-        if (videoRef.current) videoRef.current.srcObject = stream;
-        startAnalysisLoop();
-      } catch (err) {
-        setError('Camera Access Denied');
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          // Wait for video to be ready before starting loop
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current?.play();
+            startAnalysisLoop();
+          };
+        }
+      } catch (err: any) {
+        console.error("Camera Error:", err);
+        setError(`Camera Error: ${err.message || 'Access Denied'}`);
       }
     };
 
@@ -57,34 +64,39 @@ const GestureCamera: React.FC<GestureCameraProps> = ({ onGesture, isActive }) =>
         try {
           const canvas = canvasRef.current;
           const video = videoRef.current;
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(video, 0, 0);
-
-          const base64Image = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
           
-          const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash-exp', // Fast vision model
-            contents: [
-              {
-                parts: [
-                  { text: "Look at the person's hands. Determine if they are signaling a direction: FORWARD (palm up/forward), BACKWARD (palm back), LEFT (pointing left), RIGHT (pointing right), or STOP (fist or flat hand). Respond with ONLY one word from that list. If nothing detected, respond NONE." },
-                  { inlineData: { mimeType: 'image/jpeg', data: base64Image } }
-                ]
-              }
-            ]
-          });
+          if (video.videoWidth > 0) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(video, 0, 0);
 
-          const result = response.text.trim().toUpperCase();
-          if (['FORWARD', 'BACKWARD', 'LEFT', 'RIGHT', 'STOP'].includes(result)) {
-            setCurrentGesture(result);
-            onGesture(result as Command);
-          } else {
-            setCurrentGesture('Scanning...');
+            const base64Image = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+            
+            const response = await ai.models.generateContent({
+              model: 'gemini-3-flash-preview',
+              contents: [
+                {
+                  parts: [
+                    { text: "Analyze this image for hand gestures. Identify if the user is signaling: FORWARD, BACKWARD, LEFT, RIGHT, or STOP. Respond with ONLY the single command word. If no clear gesture is visible, respond with NONE." },
+                    { inlineData: { mimeType: 'image/jpeg', data: base64Image } }
+                  ]
+                }
+              ],
+            });
+
+            const result = response.text.trim().toUpperCase();
+            // Match the command strictly
+            if (['FORWARD', 'BACKWARD', 'LEFT', 'RIGHT', 'STOP'].some(c => result.includes(c))) {
+              const cmdMatch = ['FORWARD', 'BACKWARD', 'LEFT', 'RIGHT', 'STOP'].find(c => result.includes(c)) as Command;
+              setCurrentGesture(cmdMatch);
+              onGesture(cmdMatch);
+            } else {
+              setCurrentGesture('Scanning...');
+            }
           }
         } catch (err) {
-          console.error("AI Error:", err);
+          console.error("AI Analysis Error:", err);
         } finally {
           setIsProcessing(false);
         }
@@ -104,13 +116,13 @@ const GestureCamera: React.FC<GestureCameraProps> = ({ onGesture, isActive }) =>
   }, [isActive, onGesture]);
 
   return (
-    <div className="relative h-full w-full rounded-[32px] overflow-hidden bg-slate-900 border border-white/10 shadow-inner">
+    <div className="relative h-full w-full rounded-[32px] overflow-hidden bg-slate-900 border border-white/10 shadow-2xl">
       {!isActive ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 z-10 p-6 text-center">
-          <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-4 border border-white/5">
+          <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-4 border border-white/5 shadow-lg">
             <i className="fa-solid fa-video-slash text-xl"></i>
           </div>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em]">Vision Disconnected</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">Vision System Offline</p>
         </div>
       ) : (
         <>
@@ -119,26 +131,29 @@ const GestureCamera: React.FC<GestureCameraProps> = ({ onGesture, isActive }) =>
             autoPlay 
             playsInline 
             muted 
-            className="w-full h-full object-cover grayscale-[0.2] opacity-80"
+            className="w-full h-full object-cover grayscale-[0.1] opacity-90"
             style={{ transform: 'scaleX(-1)' }}
           />
           <canvas ref={canvasRef} className="hidden" />
           
-          <div className="absolute top-4 left-4 flex items-center gap-2 bg-indigo-600 px-3 py-1.5 rounded-full border border-white/20 shadow-lg z-20">
-            <div className={`w-1.5 h-1.5 rounded-full bg-white ${isProcessing ? 'animate-ping' : ''}`}></div>
-            <span className="text-[9px] font-black uppercase tracking-widest">AI Vision</span>
+          <div className="absolute top-4 left-4 flex items-center gap-2 bg-indigo-600/90 backdrop-blur-md px-4 py-2 rounded-full border border-white/20 shadow-xl z-30">
+            <div className={`w-2 h-2 rounded-full bg-white ${isProcessing ? 'animate-pulse' : ''}`}></div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-white">AI Active</span>
           </div>
 
-          <div className="absolute inset-x-0 bottom-6 flex justify-center z-20 px-4">
-             <div className="px-8 py-3 bg-white text-slate-950 rounded-2xl font-black text-lg tracking-tighter shadow-2xl transition-all duration-300 transform scale-100">
+          <div className="absolute inset-x-0 bottom-8 flex justify-center z-30 px-4">
+             <div className="px-10 py-4 bg-white/95 backdrop-blur shadow-[0_20px_50px_rgba(0,0,0,0.3)] text-slate-950 rounded-3xl font-black text-xl tracking-tighter transition-all duration-300 transform border border-white">
                {currentGesture}
              </div>
           </div>
         </>
       )}
-      {error && !isActive && (
-        <div className="absolute inset-0 flex items-center justify-center bg-red-600/20 backdrop-blur-sm z-50 text-white p-6 text-center">
-          <p className="font-bold text-xs uppercase tracking-widest bg-red-600 px-4 py-2 rounded-lg shadow-xl">{error}</p>
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-red-950/80 backdrop-blur-sm z-50 text-white p-6 text-center">
+          <div className="bg-red-600 px-6 py-4 rounded-2xl shadow-2xl border border-red-400">
+            <i className="fa-solid fa-circle-exclamation text-2xl mb-2"></i>
+            <p className="font-bold text-xs uppercase tracking-widest">{error}</p>
+          </div>
         </div>
       )}
     </div>

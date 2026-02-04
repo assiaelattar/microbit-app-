@@ -46,11 +46,14 @@ export class BluetoothService {
       const server = await this.device.gatt?.connect();
       if (!server) throw new Error('Could not connect to GATT server.');
 
+      // Small delay to allow GATT discovery to stabilize
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       this.log('Fetching UART Service...');
       const service = await server.getPrimaryService(UART_SERVICE_UUID);
       
-      this.log('Fetching TX/RX characteristic...');
-      // 0002 is the RX characteristic on the peripheral side (what we write to)
+      this.log('Fetching RX characteristic...');
+      // 0002 is the characteristic we write to (central -> peripheral)
       this.characteristic = await service.getCharacteristic(UART_RX_CHARACTERISTIC_UUID);
 
       this.device.addEventListener('gattserverdisconnected', () => {
@@ -59,7 +62,7 @@ export class BluetoothService {
         this.characteristic = null;
       });
 
-      this.log('System ready for transmission.');
+      this.log('System ready. Using Write Without Response.');
       return this.device.name || 'NovaQuest';
     } catch (error: any) {
       this.log(error.message, 'error');
@@ -78,12 +81,26 @@ export class BluetoothService {
       if (mapped) {
         const encoder = new TextEncoder();
         const data = encoder.encode(mapped + '\n');
-        // writeValue is standard for newer browsers
-        await this.characteristic.writeValue(data);
+        
+        /**
+         * 'GATT operation not permitted' usually occurs when writeValue() (with response) 
+         * is called on a characteristic that only supports writeValueWithoutResponse().
+         * Most UART implementations prefer the latter.
+         */
+        if (this.characteristic.writeValueWithoutResponse) {
+          await this.characteristic.writeValueWithoutResponse(data);
+        } else {
+          await this.characteristic.writeValue(data);
+        }
+        
         this.log(`SENT: "${mapped}"`, 'tx');
       }
     } catch (error: any) {
       this.log(`TX Fail: ${error.message}`, 'error');
+      // If write fails, it might be due to a lost connection or GATT restriction
+      if (error.message.includes('not permitted')) {
+        this.log('Check if micro:bit UART service is paired correctly.', 'error');
+      }
     }
   }
 
@@ -103,7 +120,7 @@ export class BluetoothService {
   disconnect() {
     if (this.device?.gatt?.connected) {
       this.device.gatt.disconnect();
-      this.log('Manual disconnection initiated.');
+      this.log('Manual disconnection.');
     }
   }
 
