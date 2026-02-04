@@ -1,0 +1,9 @@
+{
+  "name": "NovaQuest Commander",
+  "description": "An educational PWA to control NovaQuest robot cars using Bluetooth and real-time Gemini AI gesture recognition.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "bluetooth"
+  ]
+}
